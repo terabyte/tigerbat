@@ -5,33 +5,13 @@ services:
         ports:
             - "2379"
             - "2380"
-        command: /usr/local/bin/etcd --listen-client-urls="http://0.0.0.0:2379" --advertise-client-urls="http://${HOSTNAME}:2379"
-#    artifactory:
-#        image: jfrog-docker-reg2.bintray.io/jfrog/artifactory-oss
-#        depends_on:
-#            - etcd
-#        ports:
-#            - "8081"
-    registry:
-        image: registry:2
-        ports:
-            - "5000"
+        command: --listen-client-urls="http://0.0.0.0:2379" --advertise-client-urls="http://${HOSTNAME}:2379"
     cache:
         build: ../..
+        #image: fkautz/tigerbat
         depends_on:
             - etcd
-            - registry
         ports: 
             - "80"
         environment:
-            - UPSTREAM_SERVER=http://registry:5000
-#    gradle:
-#        build: ../../examples/gradle
-#        depends_on:
-#            - cache
-#            - artifactory
-#    h2load:
-#        build: ../../examples/h2load
-#        depends_on:
-#            - cache
-#            - artifactory
+            - UPSTREAM_SERVER=https://httpbin.org
