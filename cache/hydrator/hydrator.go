@@ -3,7 +3,6 @@ package hydrator
 import (
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"github.com/pquerna/cachecontrol/cacheobject"
 	"io/ioutil"
 	"log"
@@ -41,47 +40,69 @@ func (h *hydratorImpl) Get(key string, start int64, end int64) ([]byte, error) {
 	}
 	log.Println("Range", byteRange)
 	request.Header.Add("Range", byteRange)
+	request.Close = true
 	response, err := h.client.Do(request)
 	if err != nil {
 		return nil, err
 	}
 	data, err := ioutil.ReadAll(response.Body)
+
+	response.Body.Close()
 	if err != nil {
 		return nil, err
 	}
 	return data, nil
 }
 
-func (h *hydratorImpl) GetMetadata(key string) (map[string]string, *cacheobject.ObjectResults, error) {
+func (h *hydratorImpl) GetMetadata(key string) (*CacheEntry, error) {
 	url := h.urlRoot + "/" + key
 	request, err := http.NewRequest("HEAD", url, nil)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		log.Println(err)
-		return nil, nil, err
+		return nil, err
 	}
 	if response.StatusCode != http.StatusOK {
-		return nil, nil, errors.New("Unexpected status: " + strconv.Itoa(response.StatusCode))
+		return nil, errors.New("Unexpected status: " + strconv.Itoa(response.StatusCode))
 	}
-	size := response.Header.Get("Content-Length")
 	// log.Println(response.Header)
+
 	metadata := make(map[string]string)
-	metadata["Content-Encoding"] = response.Header.Get("Content-Encoding")
-	metadata["Content-Length"] = size
-	metadata["Content-Md5"] = response.Header.Get("Content-MD5")
-	metadata["Content-Type"] = response.Header.Get("Content-Type")
-	metadata["X-Date-Retrieved"] = response.Header.Get("Date")
-	metadata["Etag"] = response.Header.Get("Etag")
-	metadata["Last-Modified"] = response.Header.Get("Last-Modified")
+	SetIfNotEmpty(metadata, response.Header, "Content-Encodling")
+	SetIfNotEmpty(metadata, response.Header, "Content-Length")
+	SetIfNotEmpty(metadata, response.Header, "Content-MD5")
+	SetIfNotEmpty(metadata, response.Header, "Content-Type")
+	SetIfNotEmpty(metadata, response.Header, "Etag")
+	SetIfNotEmpty(metadata, response.Header, "Last-Modified")
+
+	// Always set
+	metadata["X-Cache-Date-Retrieved"] = response.Header.Get("Date")
+
+	//metadata["Content-Encoding"] = response.Header.Get("Content-Encoding")
+	//metadata["Content-Length"] = size
+	//metadata["Content-Md5"] = response.Header.Get("Content-MD5")
+	//metadata["Content-Type"] = response.Header.Get("Content-Type")
+	//metadata["Etag"] = response.Header.Get("Etag")
+	//metadata["Last-Modified"] = response.Header.Get("Last-Modified")
+
 	cacheResults, err := getCacheResult(request, response)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	log.Println("h", metadata)
-	return metadata, cacheResults, nil
+	//log.Println("h", metadata)
+	return &CacheEntry{
+		ObjectResults: cacheResults,
+		Metadata:      metadata,
+	}, nil
+}
+
+func SetIfNotEmpty(dest map[string]string, orig http.Header, key string) {
+	if key != "" && orig.Get(key) != "" {
+		dest[key] = orig.Get(key)
+	}
 }
 
 func getCacheResult(req *http.Request, res *http.Response) (*cacheobject.ObjectResults, error) {
@@ -116,16 +137,16 @@ func getCacheResult(req *http.Request, res *http.Response) (*cacheobject.ObjectR
 
 	cacheobject.CachableObject(&obj, &rv)
 	cacheobject.ExpirationObject(&obj, &rv)
-	log.Println(obj)
-	log.Println(rv)
+	//log.Println(obj)
+	//log.Println(rv)
 
 	if rv.OutErr != nil {
 		return nil, rv.OutErr
 	}
 
-	fmt.Println("Errors: ", rv.OutErr)
-	fmt.Println("Reasons to not cache: ", rv.OutReasons)
-	fmt.Println("Warning headers to add: ", rv.OutWarnings)
-	fmt.Println("Expiration: ", rv.OutExpirationTime.String())
+	//log.Println("Errors: ", rv.OutErr)
+	//log.Println("Reasons to not cache: ", rv.OutReasons)
+	//log.Println("Warning headers to add: ", rv.OutWarnings)
+	//log.Println("Expiration: ", rv.OutExpirationTime.String())
 	return &rv, nil
 }

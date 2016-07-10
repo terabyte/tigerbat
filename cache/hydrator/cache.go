@@ -7,10 +7,16 @@ import (
 )
 
 type Cache interface {
-	Get(url string, clientHeaders http.Header) (sizereaderat.SizeReaderAt, error)
+	Get(url string, cacheEntry *CacheEntry) (sizereaderat.SizeReaderAt, error)
+	GetMetadata(url string, clientHeaders http.Header) (*CacheEntry, error)
+}
+
+type CacheEntry struct {
+	ObjectResults *cacheobject.ObjectResults
+	Metadata      map[string]string
 }
 
 type Hydrator interface {
 	Get(url string, offset int64, length int64) ([]byte, error)
-	GetMetadata(url string) (map[string]string, *cacheobject.ObjectResults, error)
+	GetMetadata(url string) (*CacheEntry, error)
 }

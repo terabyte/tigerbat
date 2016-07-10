@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"errors"
 	"github.com/fkautz/tigerbat/cache/hydrator"
 	"github.com/fkautz/tigerbat/cache/memorycache"
 	"github.com/gorilla/mux"
@@ -9,20 +10,19 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"time"
 	"strings"
-	"errors"
+	"time"
 )
 
 func NewHttpHandler(cache hydrator.Cache, blockSize int64) http.Handler {
 	return &httpHandler{
-		cache: cache,
+		cache:     cache,
 		blockSize: blockSize,
 	}
 }
 
 type httpHandler struct {
-	cache hydrator.Cache
+	cache     hydrator.Cache
 	blockSize int64
 }
 
@@ -30,31 +30,63 @@ func (s *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// get request url
 	vars := mux.Vars(r)
 	request := vars["request"]
-	// get object
 
-	reader, err := s.cache.Get(request, r.Header)
+	//if r.Method == "HEAD" {
+	//	w.WriteHeader(200)
+	//	return
+	//}
+
+	w.Header().Add("X-Cache-Server", "tigerbat/0.0.1")
+
+	// get object
+	cacheEntry, err := s.cache.GetMetadata(request, r.Header)
+	if err != nil {
+		w.WriteHeader(404)
+		return
+	}
+
+	// write object metadata
+	w.Header().Add("Accept-Ranges", "bytes")
+
+	for k, v := range cacheEntry.Metadata {
+		w.Header().Add(k, v)
+	}
+
 	if err != nil {
 		if err.Error() == "Not Cacheable" {
-			log.Println("Not Cacheable:", request)
+			//log.Println("Not Cacheable:", request)
 			resp, err := http.Get(viper.GetString("mirror-url") + "/" + request)
 			if err != nil {
 				log.Println(err)
 				w.WriteHeader(404)
 				return
 			}
-			defer resp.Body.Close()
 			io.Copy(w, resp.Body)
+			resp.Body.Close()
+			return
+		} else {
+			w.WriteHeader(404)
 			return
 		}
-		w.WriteHeader(404)
 		return
+	}
+
+	// if head, get metadata
+	if r.Method == "HEAD" {
+		w.WriteHeader(200)
+		return
+	}
+
+	reader, err := s.cache.Get(request, cacheEntry)
+
+	if w.Header().Get("Content-Length") == "" {
+		w.Header().Add("Content-Length", strconv.FormatInt(reader.Size(), 10))
 	}
 
 	// server
 	//http.ServeContent(w, r, request, time.Now(), io.NewSectionReader(reader, 0, reader.Size()))
 
 	// original
-	w.Header().Set("Content-Length", strconv.FormatInt(reader.Size(), 10))
 	ranges, err := parseRange(r.Header.Get("Range"), reader.Size())
 	if err != nil {
 		log.Println(err)

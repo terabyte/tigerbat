@@ -14,7 +14,6 @@ import (
 	"github.com/fkautz/tigerbat/cache/hydrator"
 	"github.com/fkautz/tigerbat/cache/sizereaderat"
 	"github.com/golang/groupcache"
-	"github.com/pquerna/cachecontrol/cacheobject"
 	"io"
 	"io/ioutil"
 	"log"
@@ -45,12 +44,12 @@ type cacheContext struct {
 }
 
 type memoryCache struct {
-	group      *groupcache.Group
-	diskCache  diskcache.Cache
-	hydrator   hydrator.Hydrator
-	blockSize  int64
-	groupName  string
-	metadata   MetadataCache
+	group     *groupcache.Group
+	diskCache diskcache.Cache
+	hydrator  hydrator.Hydrator
+	blockSize int64
+	groupName string
+	metadata  MetadataCache
 }
 
 type Config struct {
@@ -90,7 +89,6 @@ type Key struct {
 }
 
 func GenerateKey(url string, headers map[string]string) ([]byte, error) {
-	log.Printf("Generating key for:\n%s\n%s", url, headers)
 	key := Key{
 		Url: url,
 	}
@@ -155,48 +153,46 @@ func GenerateKey(url string, headers map[string]string) ([]byte, error) {
 	}
 	shasum := sha256.Sum256(js)
 
-	log.Println(string(js))
 	return shasum[:], nil
 }
-
-func (mc *memoryCache) Get(url string, clientHeaders http.Header) (sizereaderat.SizeReaderAt, error) {
+func (mc *memoryCache) GetMetadata(url string, clientHeaders http.Header) (*hydrator.CacheEntry, error) {
+	var cacheEntry *hydrator.CacheEntry
 	cacheEntry, foundMetadata := mc.metadata.Get(url, clientHeaders)
 
 	var err error
 	if !foundMetadata {
-		metadata, objectResults, err := mc.hydrator.GetMetadata(url)
+		cacheEntry, err = mc.hydrator.GetMetadata(url)
 		if err != nil {
 			return nil, err
-		}
-
-		cacheEntry = CacheEntry{
-			ObjectResults: objectResults,
-			Metadata:      metadata,
 		}
 
 		if len(cacheEntry.ObjectResults.OutReasons) > 0 {
 			return nil, NotCacheable{}
 		}
 
-		now := time.Now()
-		exp := cacheEntry.ObjectResults.OutExpirationTime
-		log.Println("Now     :", now.UTC())
-		log.Println("Expires :", exp.UTC())
+		//now := time.Now()
+		//exp := cacheEntry.ObjectResults.OutExpirationTime
+		//log.Println("Now:", now)
+		//log.Println("Exp:", exp)
 		if cacheEntry.ObjectResults.OutExpirationTime.Before(time.Now().Add(60 * time.Second)) {
-			log.Println("SKIP")
+			//log.Println("SKIP")
 			return nil, NotCacheable{}
-		} else if v, ok := cacheEntry.Metadata["Accept-Ranges"]; ok == true{
+		} else if v, ok := cacheEntry.Metadata["Accept-Ranges"]; ok == true {
 			if strings.ToLower(string(v[0])) == "none" {
 				return nil, NotCacheable{}
 			}
 		} else {
-			log.Println("CACHE")
+			//log.Println("CACHE")
 		}
 
-		if err := mc.metadata.Add(url, cacheEntry); err != nil {
+		if err := mc.metadata.Add(url, *cacheEntry); err != nil {
 			return nil, err
 		}
 	}
+	return cacheEntry, nil
+}
+
+func (mc *memoryCache) Get(url string, cacheEntry *hydrator.CacheEntry) (sizereaderat.SizeReaderAt, error) {
 
 	// Just passing headers in naively
 	sum, err := GenerateKey(url, cacheEntry.Metadata)
@@ -312,23 +308,18 @@ func NewCache(config Config) hydrator.Cache {
 	NewMetadataSyncer(mdCache, etcdClientV3)
 
 	mc := &memoryCache{
-		group:      group,
-		diskCache:  config.DiskCache,
-		hydrator:   config.Hydrator,
-		blockSize:  config.BlockSize,
-		groupName:  config.GroupName,
-		metadata:   mdCache,
+		group:     group,
+		diskCache: config.DiskCache,
+		hydrator:  config.Hydrator,
+		blockSize: config.BlockSize,
+		groupName: config.GroupName,
+		metadata:  mdCache,
 	}
 
 	return mc
 }
 
 type mcContext struct{}
-
-type CacheEntry struct {
-	ObjectResults *cacheobject.ObjectResults
-	Metadata      map[string]string
-}
 
 func getterFunc(ctx groupcache.Context, key string, dest groupcache.Sink) error {
 	typedCtx := ctx.(cacheContext)
@@ -342,13 +333,9 @@ func getterFunc(ctx groupcache.Context, key string, dest groupcache.Sink) error 
 		if err != nil {
 			return err
 		}
-		metadata, cacheResult, err := typedCtx.hydrator.GetMetadata(info.Url)
+		cacheEntry, err := typedCtx.hydrator.GetMetadata(info.Url)
 		if err != nil {
 			return err
-		}
-		cacheEntry := CacheEntry{
-			ObjectResults: cacheResult,
-			Metadata:      metadata,
 		}
 		var buf bytes.Buffer
 		encoder := gob.NewEncoder(&buf)

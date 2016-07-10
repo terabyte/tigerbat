@@ -19,14 +19,12 @@ import (
 	"github.com/fkautz/tigerbat/cache/httpserver"
 	"github.com/fkautz/tigerbat/cache/hydrator"
 	"github.com/fkautz/tigerbat/cache/memorycache"
-	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/pivotal-golang/bytefmt"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"log"
 	"net/http"
-	"os"
 )
 
 // flags
@@ -142,7 +140,7 @@ to quickly create a Cobra application.`,
 		//handler := lox.NewHandler(lox.NewMemoryCache(), router)
 		var handler http.Handler
 		handler = router
-		handler = handlers.LoggingHandler(os.Stderr, handler)
+		//handler = handlers.LoggingHandler(os.Stderr, handler)
 		err = http.ListenAndServe(address, handler)
 		if err != nil {
 			log.Fatalln(err)
