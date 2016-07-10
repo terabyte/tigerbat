@@ -5,13 +5,13 @@ services:
         ports:
             - "2379"
             - "2380"
-        command: --listen-client-urls="http://0.0.0.0:2379" --advertise-client-urls="http://${HOSTNAME}:2379"
-    cache:
-        build: ../..
-        #image: fkautz/tigerbat
-        depends_on:
-            - etcd
-        ports: 
-            - "80"
-        environment:
-            - UPSTREAM_SERVER=https://httpbin.org
+        command: etcd --listen-client-urls="http://0.0.0.0:2379" --advertise-client-urls="http://${HOSTNAME}:2379"
+#    cache:
+#        build: ../..
+#        #image: fkautz/tigerbat
+#        depends_on:
+#            - etcd
+#        ports: 
+#            - "80"
+#        environment:
+#            - UPSTREAM_SERVER=https://httpbin.org
