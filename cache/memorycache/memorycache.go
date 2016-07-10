@@ -299,13 +299,17 @@ func NewCache(config Config) hydrator.Cache {
 
 	group := groupcache.NewGroup(config.GroupName, config.MaxMemoryUsage, groupcache.GetterFunc(getterFunc))
 
-	etcdClient, err := clientv3.NewFromURL("etcd:2379")
+	etcdConfig := clientv3.Config{
+		Endpoints: config.Etcd,
+	}
+
+	etcdClientV3, err := clientv3.New(etcdConfig)
 	if err != nil {
 		log.Panicln(err)
 	}
 
 	mdCache := NewMetadataCache()
-	NewMetadataSyncer(mdCache, etcdClient)
+	NewMetadataSyncer(mdCache, etcdClientV3)
 
 	mc := &memoryCache{
 		group:      group,
