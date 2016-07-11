@@ -18,7 +18,7 @@ TigerBat is written in Go and integrates well-tested distributed libraries such 
 
 * HTTP headers are used to determine cacheability.
 * Cacheable objects expiring in less than 60 seconds are not cached.
-* The HTTP verb `HEAD` is determined whether an object is cacheable, not `GET`.
+* The HTTP verb `HEAD` is used to determine whether an object is cacheable, not `GET`.
 * Responses are immediately streamed if the object is not cached.
 * Upstream server must allow `Range` requests on cacheable objects.
 * The cluster will download cacheable large objects in `2 megabyte` intervals and will deliver each interval as soon as
